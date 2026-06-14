@@ -59,7 +59,7 @@ jobs:
             -project LiveWallpaper.xcodeproj \
             -target LiveWallpaper \
             -configuration Release \
-            -derivedDataPath build/xcode-derived \
+            SYMROOT=build/xcode-build \
             CODE_SIGN_IDENTITY="-" \
             2>&1 | tee build/xcode-build.log
 
@@ -67,7 +67,7 @@ jobs:
       - name: Locate .app bundle
         id: locate
         run: |
-          APP=$(find build/xcode-derived -name "LiveWallpaper.app" -type d | head -1)
+          APP=$(find build/xcode-build -name "LiveWallpaper.app" -type d | head -1)
           echo "app_path=$APP" >> "$GITHUB_OUTPUT"
           if [ -z "$APP" ]; then
             echo "FATAL: LiveWallpaper.app not found in build output"
