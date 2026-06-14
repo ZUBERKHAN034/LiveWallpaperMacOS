@@ -55,6 +55,12 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
+
+          # AppIcon.icon is in .gitignore but referenced in the
+          # project's Resources phase.  Drop it so actool doesn't
+          # fail on CI where the file is absent.
+          sed -i '' '/AppIcon.icon/d' LiveWallpaper.xcodeproj/project.pbxproj
+
           xcodebuild \
             -project LiveWallpaper.xcodeproj \
             -target LiveWallpaper \
