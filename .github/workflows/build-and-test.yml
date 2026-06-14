@@ -53,16 +53,15 @@ jobs:
       - name: Build LiveWallpaper.app
         working-directory: ${{ github.workspace }}
         run: |
+          set -o pipefail
+          mkdir -p build
           xcodebuild \
             -project LiveWallpaper.xcodeproj \
             -target LiveWallpaper \
             -configuration Release \
             -derivedDataPath build/xcode-derived \
             CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=YES \
-            DEVELOPMENT_TEAM="" \
             2>&1 | tee build/xcode-build.log
-          echo "BUILD_EXIT=$?" >> "$GITHUB_ENV"
 
       # ── 2e. Locate the built .app ──────────────────────────
       - name: Locate .app bundle
@@ -117,6 +116,10 @@ jobs:
         if: always()
         run: |
           APP="${{ steps.locate.outputs.app_path }}"
+          if [ -z "$APP" ]; then
+            echo "SKIP: no .app path (build likely failed)"
+            exit 0
+          fi
           BIN="$APP/Contents/MacOS/LiveWallpaper"
 
           echo "Checking for AerialCatalog-specific symbols …"
@@ -148,7 +151,7 @@ jobs:
 
       # ── 2j. Upload .app artifact ────────────────────────────
       - name: Upload artifact
-        if: always()
+        if: always() && steps.locate.outputs.app_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: LiveWallpaper-app
