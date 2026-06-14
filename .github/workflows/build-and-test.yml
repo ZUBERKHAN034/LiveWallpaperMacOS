@@ -83,7 +83,6 @@ jobs:
         run: |
           APP=$(find build/xcode-build -name "LiveWallpaper.app" -type d | head -1)
           echo "app_path=$APP" >> "$GITHUB_OUTPUT"
-          echo "app_dir=$(dirname "$APP")" >> "$GITHUB_OUTPUT"
           if [ -z "$APP" ]; then
             echo "FATAL: LiveWallpaper.app not found in build output"
             exit 1
@@ -164,14 +163,20 @@ jobs:
             tail -100 build/xcode-build.log
           fi
 
-      # ── 2j. Upload .app artifact ────────────────────────────
-      # Setting working-directory to the .app's parent so the
-      # zip root is just "LiveWallpaper.app" — unzip → drag.
+      # ── 2j. Package .app as flat zip (unzip → drag to /Applications)
+      - name: Package .app
+        if: always() && steps.locate.outputs.app_path != ''
+        run: |
+          APP="${{ steps.locate.outputs.app_path }}"
+          cd "$(dirname "$APP")"
+          ditto -c -k --keepParent "LiveWallpaper.app" "$GITHUB_WORKSPACE/build/LiveWallpaper.zip"
+          ls -lh "$GITHUB_WORKSPACE/build/LiveWallpaper.zip"
+
+      # ── 2k. Upload artifact
       - name: Upload artifact
         if: always() && steps.locate.outputs.app_path != ''
-        working-directory: ${{ steps.locate.outputs.app_dir }}
         uses: actions/upload-artifact@v4
         with:
           name: LiveWallpaper-app
-          path: LiveWallpaper.app
+          path: build/LiveWallpaper.zip
           retention-days: 14
