@@ -63,11 +63,19 @@ jobs:
 
           xcodebuild \
             -project LiveWallpaper.xcodeproj \
+            -target wallpaperdaemon \
+            -configuration Release \
+            SYMROOT=build/xcode-build \
+            CODE_SIGN_IDENTITY="-" \
+            2>&1 | tee -a build/xcode-build.log
+
+          xcodebuild \
+            -project LiveWallpaper.xcodeproj \
             -target LiveWallpaper \
             -configuration Release \
             SYMROOT=build/xcode-build \
             CODE_SIGN_IDENTITY="-" \
-            2>&1 | tee build/xcode-build.log
+            2>&1 | tee -a build/xcode-build.log
 
       # ── 2e. Locate the built .app ──────────────────────────
       - name: Locate .app bundle
