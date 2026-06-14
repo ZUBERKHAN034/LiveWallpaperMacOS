@@ -21,6 +21,8 @@
 		04E056FF2EEAB3EE00F90A44 /* LiveWallpaperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E056672EEAB3EE00F90A44 /* LiveWallpaperApp.swift */; };
 		04E0570B2EEAB3EE00F90A44 /* WallpaperEngine.mm in Sources */ = {isa = PBXBuildFile; fileRef = 04E056F02EEAB3EE00F90A44 /* WallpaperEngine.mm */; };
 		04E057192EEAB3EE00F90A44 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E0565F2EEAB3EE00F90A44 /* ContentView.swift */; };
+		B1000001001 /* AerialCatalogManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001001 /* AerialCatalogManager.swift */; };
+		B1000001002 /* AerialCatalogBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001002 /* AerialCatalogBridge.swift */; };
 		04E0571C2EEAB3EE00F90A44 /* SaveSystem.mm in Sources */ = {isa = PBXBuildFile; fileRef = 04E0566C2EEAB3EE00F90A44 /* SaveSystem.mm */; };
 		04E057382EEAB3EE00F90A44 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 04E0565D2EEAB3EE00F90A44 /* Assets.xcassets */; };
 		04E057742EEAB43200F90A44 /* emitterstate.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04E0574A2EEAB43200F90A44 /* emitterstate.cpp */; };
@@ -271,6 +273,8 @@
 		04E058962EEAB54E00F90A44 /* yaml-cpp.pc.in */ = {isa = PBXFileReference; lastKnownFileType = text; path = "yaml-cpp.pc.in"; sourceTree = "<group>"; };
 		04F816DE2EEBE3FB00CFB473 /* DisplayObjc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DisplayObjc.h; sourceTree = SOURCE_ROOT; };
 		04F816DF2EEBE3FB00CFB473 /* DisplayObjc.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DisplayObjc.mm; sourceTree = SOURCE_ROOT; };
+		B2000001001 /* AerialCatalogManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerialCatalogManager.swift; sourceTree = SOURCE_ROOT; };
+		B2000001002 /* AerialCatalogBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerialCatalogBridge.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -343,6 +347,8 @@
 			isa = PBXGroup;
 			children = (
 				04E0565D2EEAB3EE00F90A44 /* Assets.xcassets */,
+				B2000001001 /* AerialCatalogManager.swift */,
+				B2000001002 /* AerialCatalogBridge.swift */,
 				04E0565F2EEAB3EE00F90A44 /* ContentView.swift */,
 				04E056612EEAB3EE00F90A44 /* DisplayManager.h */,
 				04E056662EEAB3EE00F90A44 /* LiveWallpaper-Bridging-Header.h */,
@@ -751,6 +757,8 @@
 				04F816E02EEBE3FB00CFB473 /* DisplayObjc.mm in Sources */,
 				04E0570B2EEAB3EE00F90A44 /* WallpaperEngine.mm in Sources */,
 				04E057192EEAB3EE00F90A44 /* ContentView.swift in Sources */,
+				B1000001001 /* AerialCatalogManager.swift in Sources */,
+				B1000001002 /* AerialCatalogBridge.swift in Sources */,
 				04E0571C2EEAB3EE00F90A44 /* SaveSystem.mm in Sources */,
 			);
 		};

@@ -59,6 +59,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: NSLocalizedString("Quit", comment: ""), action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
 
+        // One-time lock-screen onboarding hint
+        NotificationCenter.default.addObserver(
+            forName: AerialCatalogManager.didSyncNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.maybeShowAerialOnboarding()
+        }
+
         // Create main window with ContentView
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
@@ -108,6 +117,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         engine?.terminateApplication()
         NSApp.terminate(nil)
+    }
+
+    private func maybeShowAerialOnboarding() {
+        guard !AerialCatalogBridge.hasShownOnboarding else { return }
+        AerialCatalogBridge.markOnboardingShown()
+
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = NSLocalizedString("Lock Screen Ready", comment: "")
+            alert.informativeText = NSLocalizedString(
+                "Your wallpaper is also ready for the lock screen — open System Settings → Wallpaper, pick the LiveWallpaper category, and select your video once to activate it.",
+                comment: ""
+            )
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
+            alert.runModal()
+        }
     }
 }
 

@@ -25,6 +25,7 @@
 #import <mach/mach.h>
 #include <spawn.h>
 #include <unistd.h>
+#import "LiveWallpaper-Swift.h"
 
 namespace fs = std::filesystem;
 
@@ -949,6 +950,7 @@ static NSString *folderPath = nil;
   }
 
   self.currentVideoPath = videoPath;
+  [AerialCatalogBridge syncVideo:videoPath];
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   [defaults setObject:videoPath forKey:@"LastWallpaperPath"];
   [defaults synchronize];
