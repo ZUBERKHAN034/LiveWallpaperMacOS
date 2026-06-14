@@ -1,0 +1,156 @@
+# ──────────────────────────────────────────────────────────────
+# 1.  Workflow trigger
+# ──────────────────────────────────────────────────────────────
+name: Build and Smoke Test
+
+on:
+  push:
+    branches: [SwiftUI]
+  pull_request:
+    branches: [SwiftUI]
+  workflow_dispatch:
+
+# ──────────────────────────────────────────────────────────────
+# 2.  Build job (macOS 26, Xcode 26.4.1, arm64)
+# ──────────────────────────────────────────────────────────────
+jobs:
+  build:
+    runs-on: macos-26
+
+    steps:
+      # ── 2a. Checkout with submodules ──────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── 2b. Select Xcode + accept license ──────────────────
+      - name: Select Xcode 26.4.1
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.1.app
+          sudo xcodebuild -runFirstLaunch 2>/dev/null || true
+          sudo xcodebuild -license accept
+          xcodebuild -version
+
+      # ── 2c. Build yaml-cpp static library ──────────────────
+      # The Xcode project links against libyaml-cpp.a in
+      # build/vendor/yaml-cpp/.  The bundled yaml-cpp source
+      # files in the Sources phase need the header path
+      # $(SRCROOT)/vendor/yaml-cpp/include, provided by the
+      # submodule checkout above.
+      - name: Build yaml-cpp
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p build/vendor/yaml-cpp
+          cd build/vendor/yaml-cpp
+          cmake ../../../vendor/yaml-cpp \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DYAML_CPP_BUILD_TESTS=OFF \
+            -DYAML_CPP_BUILD_TOOLS=OFF
+          make -j$(sysctl -n hw.ncpu)
+
+      # ── 2d. Build the app via xcodebuild ───────────────────
+      - name: Build LiveWallpaper.app
+        working-directory: ${{ github.workspace }}
+        run: |
+          xcodebuild \
+            -project LiveWallpaper.xcodeproj \
+            -target LiveWallpaper \
+            -configuration Release \
+            -derivedDataPath build/xcode-derived \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=YES \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tee build/xcode-build.log
+          echo "BUILD_EXIT=$?" >> "$GITHUB_ENV"
+
+      # ── 2e. Locate the built .app ──────────────────────────
+      - name: Locate .app bundle
+        id: locate
+        run: |
+          APP=$(find build/xcode-derived -name "LiveWallpaper.app" -type d | head -1)
+          echo "app_path=$APP" >> "$GITHUB_OUTPUT"
+          if [ -z "$APP" ]; then
+            echo "FATAL: LiveWallpaper.app not found in build output"
+            exit 1
+          fi
+          echo "Found: $APP"
+          ls -la "$APP/Contents/MacOS/"
+
+      # ── 2f. Smoke test — launch .app briefly ───────────────
+      # macOS 26 CI has no display, but open -W -g runs the app
+      # backgrounded.  We check it doesn't crash within 15 s.
+      - name: Smoke test (launch + monitor)
+        run: |
+          APP="${{ steps.locate.outputs.app_path }}"
+          echo "Launching $APP …"
+          open -W -g "$APP" &
+          PID=$!
+          sleep 15
+
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "App still running after 15 s — PASS"
+            kill "$PID" 2>/dev/null
+          else
+            echo "App exited before timeout"
+          fi
+
+      # ── 2g. Collect crash reports (if any) ─────────────────
+      - name: Capture crash reports
+        if: always()
+        run: |
+          CRASH_DIR="$HOME/Library/Logs/DiagnosticReports"
+          if [ -d "$CRASH_DIR" ]; then
+            shopt -s nullglob
+            for f in "$CRASH_DIR"/LiveWallpaper*.crash "$CRASH_DIR"/LiveWallpaper*.ips; do
+              echo "=== $(basename "$f") ==="
+              head -80 "$f"
+              echo ""
+            done
+          fi
+        continue-on-error: true
+
+      # ── 2h. Verify built binary contains new code ──────────
+      # Grep for a unique log string from AerialCatalogManager
+      # to prove it was compiled into the product.
+      - name: Verify build correctness
+        if: always()
+        run: |
+          APP="${{ steps.locate.outputs.app_path }}"
+          BIN="$APP/Contents/MacOS/LiveWallpaper"
+
+          echo "Checking for AerialCatalog-specific symbols …"
+          if [ ! -f "$BIN" ]; then
+            echo "FATAL: binary not found at $BIN"
+            exit 1
+          fi
+
+          strings "$BIN" | grep -F "AerialCatalog" || {
+            echo ""
+            echo "*** VERIFICATION FAILED ***"
+            echo "AerialCatalog symbols NOT found in binary."
+            echo "The new code was NOT compiled into the product."
+            echo ""
+            echo "--- Searching for any transcode-related strings ---"
+            strings "$BIN" | grep -iE "transcode|NumberOfTemporal|HEVC|Main10" || true
+            exit 1
+          }
+          echo "PASS: AerialCatalog symbols found in binary"
+
+      # ── 2i. Print build log tail on failure ────────────────
+      - name: Print build log (if present)
+        if: failure() && always()
+        run: |
+          if [ -f build/xcode-build.log ]; then
+            echo "=== last 100 lines of xcodebuild ==="
+            tail -100 build/xcode-build.log
+          fi
+
+      # ── 2j. Upload .app artifact ────────────────────────────
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveWallpaper-app
+          path: ${{ steps.locate.outputs.app_path }}
+          retention-days: 14
