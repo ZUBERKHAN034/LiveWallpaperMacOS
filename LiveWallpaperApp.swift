@@ -167,8 +167,37 @@ func setLoginItem(enabled: Bool) {
 
 // MARK: - Lock Screen Automation
 
+private func lsaLog(_ msg: String) {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("lsa_debug.log")
+    let line = "[LSA] \(msg)\n"
+    if let fh = try? FileHandle(forWritingTo: url) {
+        _ = try? fh.seekToEnd()
+        try? fh.write(contentsOf: Data(line.utf8))
+        try? fh.close()
+    } else {
+        try? Data(line.utf8).write(to: url, options: .atomic)
+    }
+}
+
+private func lsaDumpTree(_ elem: AXUIElement, _ prefix: String = "") {
+    var roleVal: CFTypeRef?, descVal: CFTypeRef?, titleVal: CFTypeRef?
+    AXUIElementCopyAttributeValue(elem, kAXRoleAttribute as CFString, &roleVal)
+    AXUIElementCopyAttributeValue(elem, kAXDescriptionAttribute as CFString, &descVal)
+    AXUIElementCopyAttributeValue(elem, kAXTitleAttribute as CFString, &titleVal)
+    let role = (roleVal as? String) ?? "?"
+    let desc = (descVal as? String) ?? ""
+    let title = (titleVal as? String) ?? ""
+    lsaLog("\(prefix)\(role) desc='\(desc)' title='\(title)'")
+    var kidsVal: CFTypeRef?
+    if AXUIElementCopyAttributeValue(elem, kAXChildrenAttribute as CFString, &kidsVal) == .success {
+        if let kids = kidsVal as? [AXUIElement] {
+            for kid in kids { lsaDumpTree(kid, prefix + "  ") }
+        }
+    }
+}
+
 func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
-    fputs("[LSA] START tile=\(tileName) trusted=\(AXIsProcessTrusted())\n", stderr)
+    lsaLog("START tile=\(tileName) trusted=\(AXIsProcessTrusted())")
     guard AXIsProcessTrusted() else { completion(false); return }
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
         completion(false); return
@@ -183,17 +212,17 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
             })?.processIdentifier { pid = p; break }
             RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
         }
-        guard pid != -1 else { fputs("[LSA] ext not found\n", stderr); completion(false); return }
+        guard pid != -1 else { lsaLog("ext not found"); completion(false); return }
         let app = AXUIElementCreateApplication(pid)
-        fputs("[LSA] step1 LiveWallpaper pid=\(pid)\n", stderr)
+        lsaLog("step1 LiveWallpaper pid=\(pid)")
         lsaDumpTree(app)
         guard lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 10) else {
-            fputs("[LSA] step1 FAILED\n", stderr); completion(false); return
+            lsaLog("step1 FAILED"); completion(false); return
         }
-        fputs("[LSA] step1 OK, scheduling step2\n", stderr)
+        lsaLog("step1 OK, scheduling step2")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             let ok = lsaFindAndPress(app: app, desc: tn, timeout: 5)
-            fputs("[LSA] step2 result=\(ok)\n", stderr)
+            lsaLog("step2 result=\(ok)")
             completion(ok)
         }
     }
@@ -207,7 +236,7 @@ private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) ->
         var windowsVal: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsVal)
         let arr = (windowsVal as? [AXUIElement]) ?? []
-        if iterations == 1 { fputs("[LSA] iter1 windows err=\(err.rawValue) count=\(arr.count)\n", stderr) }
+        if iterations == 1 { lsaLog("iter1 windows err=\(err.rawValue) count=\(arr.count)") }
         if err == .success && arr.count > 0 {
             for win in arr {
                 if let btn = findButton(in: win, desc: desc) {
@@ -217,25 +246,8 @@ private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) ->
         }
         RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
     }
-    fputs("[LSA] TIMEOUT '\(desc)' after \(iterations) iters\n", stderr)
+    lsaLog("TIMEOUT '\(desc)' after \(iterations) iters")
     return false
-}
-
-private func lsaDumpTree(_ elem: AXUIElement, _ prefix: String = "") {
-    var roleVal: CFTypeRef?, descVal: CFTypeRef?, titleVal: CFTypeRef?
-    AXUIElementCopyAttributeValue(elem, kAXRoleAttribute as CFString, &roleVal)
-    AXUIElementCopyAttributeValue(elem, kAXDescriptionAttribute as CFString, &descVal)
-    AXUIElementCopyAttributeValue(elem, kAXTitleAttribute as CFString, &titleVal)
-    let role = (roleVal as? String) ?? "?"
-    let desc = (descVal as? String) ?? ""
-    let title = (titleVal as? String) ?? ""
-    fputs("[LSA] \(prefix)\(role) desc='\(desc)' title='\(title)'\n", stderr)
-    var kidsVal: CFTypeRef?
-    if AXUIElementCopyAttributeValue(elem, kAXChildrenAttribute as CFString, &kidsVal) == .success {
-        if let kids = kidsVal as? [AXUIElement] {
-            for kid in kids { lsaDumpTree(kid, prefix + "  ") }
-        }
-    }
 }
 
 private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
@@ -262,7 +274,7 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
             }
         }
     }
-    if scanned > 0 { fputs("[LSA] \(scanned) buttons scanned, no '\(desc)'\n", stderr) }
+    if scanned > 0 { lsaLog("\(scanned) buttons scanned, no '\(desc)'") }
     return nil
 }
 
