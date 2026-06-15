@@ -168,13 +168,15 @@ func setLoginItem(enabled: Bool) {
 func applyLockScreenAutomation(tileName: String, completion: @escaping @Sendable (Bool) -> Void) {
     guard AXIsProcessTrusted() else { completion(false); return }
     DispatchQueue.main.async {
-        completion(lsaRun(tileName: tileName))
+        MainActor.assumeIsolated {
+            completion(lsaRun(tileName: tileName))
+        }
     }
 }
 
-func lsaRun(tileName: String) -> Bool {
+nonisolated func lsaRun(tileName: String) -> Bool {
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
-    NSWorkspace.shared.open(u)
+    DispatchQueue.main.sync { NSWorkspace.shared.open(u) }
     guard let w = lsaWin(8) else { return false }
     guard let c = lsaBtn(w, "LiveWallpaper") else { return false }
     guard AXShimPerformAction(c, "AXPress" as CFString) else { return false }
@@ -185,10 +187,10 @@ func lsaRun(tileName: String) -> Bool {
     return true
 }
 
-func lsaWin(_ to: TimeInterval) -> AXUIElement? {
+nonisolated func lsaWin(_ to: TimeInterval) -> AXUIElement? {
     let e = Date().addingTimeInterval(to)
     while Date() < e {
-        if let a = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) {
+        if let a = DispatchQueue.main.sync(execute: { NSWorkspace.shared.runningApplications }).first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) {
             let r = AXShimCreateApplication(a.processIdentifier)
             if let list = lsaCast(AXShimCopyAttr(r, "AXWindows" as CFString)) as? [AXUIElement] {
                 for w in list {
@@ -202,7 +204,7 @@ func lsaWin(_ to: TimeInterval) -> AXUIElement? {
     return nil
 }
 
-func lsaBtn(_ p: AXUIElement, _ n: String) -> AXUIElement? {
+nonisolated func lsaBtn(_ p: AXUIElement, _ n: String) -> AXUIElement? {
     var q: [AXUIElement] = [p]
     while !q.isEmpty {
         let x = q.removeFirst()
@@ -216,5 +218,5 @@ func lsaBtn(_ p: AXUIElement, _ n: String) -> AXUIElement? {
     return nil
 }
 
-private func lsaCast(_ v: CFTypeRef?) -> CFTypeRef? { return v }
+nonisolated private func lsaCast(_ v: CFTypeRef?) -> CFTypeRef? { return v }
 
