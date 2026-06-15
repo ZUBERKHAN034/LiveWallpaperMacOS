@@ -212,7 +212,6 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
 }
 
 private func lsaDumpTree(_ elem: AXUIElement, _ prefix: String = "", depth: Int = 0) {
-    if depth > 5 { return }
     var roleVal: CFTypeRef?, descVal: CFTypeRef?, titleVal: CFTypeRef?
     AXUIElementCopyAttributeValue(elem, kAXRoleAttribute as CFString, &roleVal)
     AXUIElementCopyAttributeValue(elem, kAXDescriptionAttribute as CFString, &descVal)
@@ -220,9 +219,7 @@ private func lsaDumpTree(_ elem: AXUIElement, _ prefix: String = "", depth: Int 
     let role = (roleVal as? String) ?? "?"
     let desc = (descVal as? String) ?? ""
     let title = (titleVal as? String) ?? ""
-    if role == "AXButton" || role == "AXScrollArea" || role == "AXOpaqueProviderGroup" || role == "AXGroup" || role == "AXWindow" || role == "AXApplication" {
-        lsaLog("\(prefix)\(role) desc='\(desc)' title='\(title)'")
-    }
+    lsaLog("\(prefix)\(role) desc='\(desc)' title='\(title)'")
     var kidsVal: CFTypeRef?
     if AXUIElementCopyAttributeValue(elem, kAXChildrenAttribute as CFString, &kidsVal) == .success {
         if let kids = kidsVal as? [AXUIElement] {
