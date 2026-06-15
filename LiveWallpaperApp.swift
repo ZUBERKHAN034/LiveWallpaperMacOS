@@ -20,6 +20,9 @@ import SwiftUI
 import AppKit
 import ApplicationServices
 import ServiceManagement
+import OSLog
+
+private let lsaLog = OSLog(subsystem: "com.zacy.livewallpaper", category: "LockScreen")
 
 let sharedEngine = WallpaperEngine.shared()
 
@@ -169,31 +172,31 @@ func setLoginItem(enabled: Bool) {
 
 func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
     guard AXIsProcessTrusted() else {
-        print("[lsa] AX not trusted")
+        os_log("AX not trusted", log: lsaLog, type: .error)
         completion(false); return
     }
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
         completion(false); return
     }
-    print("[lsa] opening System Settings, tile='\(tileName)'")
+    os_log("opening System Settings, tile=%{public}s", log: lsaLog, type: .info, tileName)
     NSWorkspace.shared.open(u)
     let tn = tileName
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
         guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else {
-            print("[lsa] System Settings not running after 2s")
+            os_log("System Settings not running after 2s", log: lsaLog, type: .error)
             completion(false); return
         }
         let pid = sp.processIdentifier
         let app = AXUIElementCreateApplication(pid)
-        print("[lsa] step1: find+press 'LiveWallpaper'")
+        os_log("step1: find+press 'LiveWallpaper'", log: lsaLog, type: .info)
         if !lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 8) {
-            print("[lsa] step1 FAILED")
+            os_log("step1 FAILED", log: lsaLog, type: .error)
             completion(false); return
         }
-        print("[lsa] step1 OK, waiting then step2: find+press '\(tn)'")
+        os_log("step1 OK, waiting then step2: find+press '%{public}s'", log: lsaLog, type: .info, tn)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             let ok = lsaFindAndPress(app: app, desc: tn, timeout: 5)
-            print("[lsa] step2 result=\(ok)")
+            os_log("step2 result=%{public}d", log: lsaLog, type: .info, ok)
             completion(ok)
         }
     }
@@ -205,50 +208,35 @@ private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) ->
         var windowsVal: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsVal)
         let arr = (windowsVal as? [AXUIElement]) ?? []
-        print("[lsa] windows err=\(err.rawValue) count=\(arr.count) target=\(desc)")
+        os_log("windows err=%{public}d count=%{public}d target=%{public}s", log: lsaLog, type: .debug, err.rawValue, arr.count, desc)
         if err == .success && arr.count > 0 {
-            var allTitles: [String] = []
-            for win in arr {
-                var titleVal: CFTypeRef?
-                if AXUIElementCopyAttributeValue(win, kAXTitleAttribute as CFString, &titleVal) == .success {
-                    let title = (titleVal as? String) ?? ""
-                    allTitles.append("'\(title)'")
-                }
-            }
-            print("[lsa] all window titles: \(allTitles.joined(separator: ", "))")
             for win in arr {
                 if let btn = findButton(in: win, desc: desc) {
-                    print("[lsa] FOUND button '\(desc)' → press")
+                    os_log("FOUND button '%{public}s' → press", log: lsaLog, type: .info, desc)
                     return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
                 }
             }
-            print("[lsa] no button '\(desc)' found in any window")
+            os_log("no button '%{public}s' found in any window", log: lsaLog, type: .debug, desc)
         }
         RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.3))
     }
-    print("[lsa] TIMEOUT for '\(desc)'")
+    os_log("TIMEOUT for '%{public}s'", log: lsaLog, type: .error, desc)
     return false
 }
 
 private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
     var queue = [root]
-    var visitedRoles = [String: Int]()
     while !queue.isEmpty {
         let cur = queue.removeFirst()
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
-            let role = (roleVal as? String) ?? ""
-            visitedRoles[role, default: 0] += 1
-            if role == (kAXButtonRole as String) {
+            if let role = roleVal as? String, role == (kAXButtonRole as String) {
                 var descVal: CFTypeRef?
                 if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
-                    let d = (descVal as? String) ?? ""
-                    print("[btn] role=\(role) desc='\(d)'")
-                    if d.localizedCaseInsensitiveContains(desc) {
+                    if let d = descVal as? String, d.localizedCaseInsensitiveContains(desc) {
+                        os_log("found button desc='%{public}s'", log: lsaLog, type: .debug, d)
                         return cur
                     }
-                } else {
-                    print("[btn] role=\(role) (no desc)")
                 }
             }
         }
@@ -259,8 +247,7 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
             }
         }
     }
-    print("[btn] total roles: \(visitedRoles)")
-    print("[btn] exhausted tree, no match for '\(desc)'")
+    os_log("exhausted tree, no button matching '%{public}s'", log: lsaLog, type: .debug, desc)
     return nil
 }
 
