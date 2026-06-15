@@ -605,26 +605,23 @@ struct SettingsView: View {
 
                     // Apply to Lock Screen
                     SettingRow(title: L.lockscreenSync) {
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: {
-                                    UserDefaults.standard.bool(forKey: UserDefaultsKeys.lockscreenSync)
-                                },
-                                set: { newValue in
-                                    UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.lockscreenSync)
-                                    if newValue, let engine = sharedEngine {
-                                        let path = engine.currentVideoPath
-                                        if let path = path, path.count > 0 {
-                                            AerialCatalogBridge.syncVideo(path)
-                                        }
-                                    } else {
-                                        AerialCatalogBridge.removeSyncedEntry()
-                                    }
-                                }
-                            )
-                        )
-                        .toggleStyle(.switch)
+                        Toggle("", isOn: Binding(
+                            get: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.lockscreenSync) },
+                            set: { newValue in
+                                UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.lockscreenSync)
+                                if newValue { handleLockscreenToggleOn() }
+                                else { AerialCatalogBridge.removeSyncedEntry() }
+                            }
+                        )).toggleStyle(.switch)
+                    }
+
+                    if UserDefaults.standard.bool(forKey: UserDefaultsKeys.lockscreenSync),
+                       let p = sharedEngine?.currentVideoPath, !p.isEmpty {
+                        SettingRow(title: "") {
+                            Button(action: { applyToLockScreenNow() }) {
+                                Text(NSLocalizedString("Apply to Lock Screen Now", comment: ""))
+                            }.disabled(viewModel.isSyncingLockScreen)
+                        }
                     }
 
                     Divider()
@@ -695,6 +692,52 @@ struct SettingsView: View {
     private func openInFinder() {
         if let url = URL(string: "file://\(viewModel.folderPath)") {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    // MARK: Lock Screen
+
+    private func handleLockscreenToggleOn() {
+        guard let p = sharedEngine?.currentVideoPath, !p.isEmpty else { return }
+        AerialCatalogBridge.syncVideo(p)
+        if hasAccessibilityAccess() { showAutomationAlert() }
+        else { showPermissionExplanation() }
+    }
+
+    private func showPermissionExplanation() {
+        let a = NSAlert()
+        a.messageText = NSLocalizedString("Apply to Lock Screen", comment: "")
+        a.informativeText = NSLocalizedString(
+            "To automatically select your wallpaper as the lock screen, LiveWallpaper needs permission to control System Settings. The wallpaper has been added to the catalog — you can either grant access to apply it automatically, or select it manually in System Settings → Wallpaper → LiveWallpaper.",
+            comment: "")
+        a.alertStyle = .informational
+        a.addButton(withTitle: NSLocalizedString("Grant Access", comment: ""))
+        a.addButton(withTitle: NSLocalizedString("Not Now", comment: ""))
+        if a.runModal() == .alertFirstButtonReturn {
+            requestAccessibilityAccess()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { if hasAccessibilityAccess() { self.showAutomationAlert() } }
+        }
+    }
+
+    private func showAutomationAlert() {
+        let a = NSAlert()
+        a.messageText = NSLocalizedString("Apply Wallpaper", comment: "")
+        a.informativeText = NSLocalizedString(
+            "System Settings will open to apply your wallpaper as the lock screen. This also sets it as your desktop wallpaper.",
+            comment: "")
+        a.alertStyle = .informational
+        a.addButton(withTitle: NSLocalizedString("Apply", comment: ""))
+        a.addButton(withTitle: NSLocalizedString("Later", comment: ""))
+        if a.runModal() == .alertFirstButtonReturn { applyToLockScreenNow() }
+    }
+
+    private func applyToLockScreenNow() {
+        guard let p = sharedEngine?.currentVideoPath, !p.isEmpty else { return }
+        let tn = URL(fileURLWithPath: p).deletingPathExtension().lastPathComponent
+        viewModel.isSyncingLockScreen = true
+        applyLockScreenAutomation(tileName: tn) { [weak viewModel] ok in
+            viewModel?.isSyncingLockScreen = false
+            if ok, !AerialCatalogBridge.hasShownOnboarding { AerialCatalogBridge.markOnboardingShown() }
         }
     }
 }
@@ -799,6 +842,7 @@ class WallpaperViewModel: ObservableObject {
     @Published var pauseOnAppFocus: Bool = true
     @Published var volume: Double = 50.0
     @Published var vinttageBar: Bool = true
+    @Published var isSyncingLockScreen: Bool = false
 
     private var currentReloadID = UUID()
     private let reloadIDLock = NSLock()

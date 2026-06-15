@@ -18,7 +18,7 @@
 
 import SwiftUI
 import AppKit
-@preconcurrency import ApplicationServices
+import ApplicationServices
 import ServiceManagement
 
 let sharedEngine = WallpaperEngine.shared()
@@ -166,57 +166,21 @@ func setLoginItem(enabled: Bool) {
 
 // MARK: - Lock Screen Automation (C shim via bridging header)
 
-nonisolated(unsafe) func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
+func applyLockScreenAutomation(tileName: String, completion: @escaping @Sendable (Bool) -> Void) {
     guard AXIsProcessTrusted() else { completion(false); return }
     DispatchQueue.main.async {
         completion(lsaRun(tileName: tileName))
     }
 }
 
-nonisolated(unsafe) func lsaRun(tileName: String) -> Bool {
+func lsaRun(tileName: String) -> Bool {
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
     NSWorkspace.shared.open(u)
-    guard let w = lsaWin(8) else { return false }
-    guard let c = lsaBtn(w, "LiveWallpaper") else { return false }
-    guard AXShimPerformAction(c, "AXPress" as CFString) else { return false }
+    guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else { return false }
+    let pid = sp.processIdentifier
+    guard AXShimFindAndPress(pid, "LiveWallpaper", 8.0) else { return false }
     Thread.sleep(forTimeInterval: 1)
-    guard let w2 = lsaWin(5) else { return false }
-    guard let t = lsaBtn(w2, tileName) else { return false }
-    guard AXShimPerformAction(t, "AXPress" as CFString) else { return false }
-    return true
+    return AXShimFindAndPress(pid, tileName, 5.0)
 }
-
-nonisolated(unsafe) func lsaWin(_ to: TimeInterval) -> AXUIElement? {
-    let e = Date().addingTimeInterval(to)
-    while Date() < e {
-        if let a = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) {
-            let r = AXShimCreateApplication(a.processIdentifier)
-            if let list = lsaCast(AXShimCopyAttr(r, "AXWindows" as CFString)) as? [AXUIElement] {
-                for w in list {
-                    if let s = lsaCast(AXShimCopyAttr(w, "AXTitle" as CFString)) as? String,
-                       s.localizedCaseInsensitiveContains("wallpaper") { return w }
-                }
-            }
-        }
-        Thread.sleep(forTimeInterval: 0.5)
-    }
-    return nil
-}
-
-nonisolated(unsafe) func lsaBtn(_ p: AXUIElement, _ n: String) -> AXUIElement? {
-    var q: [AXUIElement] = [p]
-    while !q.isEmpty {
-        let x = q.removeFirst()
-        if let r = lsaCast(AXShimCopyAttr(x, "AXRole" as CFString)) as? String, r == "AXButton",
-           let d = lsaCast(AXShimCopyAttr(x, "AXDescription" as CFString)) as? String,
-           d.localizedCaseInsensitiveContains(n) { return x }
-        if let k = lsaCast(AXShimCopyAttr(x, "AXChildren" as CFString)) as? [AXUIElement] {
-            q.append(contentsOf: k)
-        }
-    }
-    return nil
-}
-
-nonisolated(unsafe) private func lsaCast(_ v: CFTypeRef?) -> CFTypeRef? { return v }
 
 

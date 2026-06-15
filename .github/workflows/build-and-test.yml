@@ -155,13 +155,25 @@ jobs:
           echo "PASS: AerialCatalog symbols found in binary"
 
       # ── 2i. Print build log tail on failure ────────────────
-      - name: Print build log (if present)
-        if: failure() && always()
+      - name: Print build errors
+        if: failure()
         run: |
           if [ -f build/xcode-build.log ]; then
-            echo "=== last 100 lines of xcodebuild ==="
-            tail -100 build/xcode-build.log
+            echo "=== BUILD ERRORS ==="
+            grep -E "error:" build/xcode-build.log || echo "(no error: lines found)"
+            echo ""
+            echo "=== last 50 lines of xcodebuild ==="
+            tail -50 build/xcode-build.log
           fi
+
+      # ── 2i2. Upload build log as artifact
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-build-log
+          path: build/xcode-build.log
+          retention-days: 7
 
       # ── 2j. Package .app as flat zip (unzip → drag to /Applications)
       - name: Package .app
