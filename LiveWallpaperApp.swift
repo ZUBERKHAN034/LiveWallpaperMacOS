@@ -167,37 +167,7 @@ func setLoginItem(enabled: Bool) {
 
 // MARK: - Lock Screen Automation
 
-private func lsaLog(_ msg: String) {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("lsa_debug.log")
-    let line = "[LSA] \(msg)\n"
-    if let fh = try? FileHandle(forWritingTo: url) {
-        _ = try? fh.seekToEnd()
-        try? fh.write(contentsOf: Data(line.utf8))
-        try? fh.close()
-    } else {
-        try? Data(line.utf8).write(to: url, options: .atomic)
-    }
-}
-
-private func lsaDumpTree(_ elem: AXUIElement, _ prefix: String = "") {
-    var roleVal: CFTypeRef?, descVal: CFTypeRef?, titleVal: CFTypeRef?
-    AXUIElementCopyAttributeValue(elem, kAXRoleAttribute as CFString, &roleVal)
-    AXUIElementCopyAttributeValue(elem, kAXDescriptionAttribute as CFString, &descVal)
-    AXUIElementCopyAttributeValue(elem, kAXTitleAttribute as CFString, &titleVal)
-    let role = (roleVal as? String) ?? "?"
-    let desc = (descVal as? String) ?? ""
-    let title = (titleVal as? String) ?? ""
-    lsaLog("\(prefix)\(role) desc='\(desc)' title='\(title)'")
-    var kidsVal: CFTypeRef?
-    if AXUIElementCopyAttributeValue(elem, kAXChildrenAttribute as CFString, &kidsVal) == .success {
-        if let kids = kidsVal as? [AXUIElement] {
-            for kid in kids { lsaDumpTree(kid, prefix + "  ") }
-        }
-    }
-}
-
 func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
-    lsaLog("START tile=\(tileName) trusted=\(AXIsProcessTrusted())")
     guard AXIsProcessTrusted() else { completion(false); return }
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
         completion(false); return
@@ -205,11 +175,6 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
     NSWorkspace.shared.open(u)
     let tn = tileName
     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-        for ra in NSWorkspace.shared.runningApplications {
-            if let bid = ra.bundleIdentifier {
-                lsaLog("running: \(bid) pid=\(ra.processIdentifier)")
-            }
-        }
         var pid: pid_t = -1
         for _ in 0..<20 {
             if let p = NSWorkspace.shared.runningApplications.first(where: {
@@ -217,17 +182,13 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
             })?.processIdentifier { pid = p; break }
             RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
         }
-        guard pid != -1 else { lsaLog("System Settings not found"); completion(false); return }
+        guard pid != -1 else { completion(false); return }
         let app = AXUIElementCreateApplication(pid)
-        lsaLog("step1 LiveWallpaper pid=\(pid)")
-        lsaDumpTree(app)
         guard lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 10) else {
-            lsaLog("step1 FAILED"); completion(false); return
+            completion(false); return
         }
-        lsaLog("step1 OK, scheduling step2")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             let ok = lsaFindAndPress(app: app, desc: tn, timeout: 5)
-            lsaLog("step2 result=\(ok)")
             completion(ok)
         }
     }
@@ -235,29 +196,22 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
 
 private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) -> Bool {
     let deadline = Date().timeIntervalSince1970 + timeout
-    var iterations = 0
     while Date().timeIntervalSince1970 < deadline {
-        iterations += 1
         if let btn = findButton(in: app, desc: desc) {
-            lsaLog("FOUND '\(desc)' at iter=\(iterations)")
             return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
         }
-        if iterations == 1 { lsaLog("iter1 no match yet for '\(desc)'") }
         RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
     }
-    lsaLog("TIMEOUT '\(desc)' after \(iterations) iters")
     return false
 }
 
 private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
     var queue = [root]
-    var scanned = 0
     while !queue.isEmpty {
         let cur = queue.removeFirst()
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
             if let role = roleVal as? String, role == (kAXButtonRole as String) {
-                scanned += 1
                 var descVal: CFTypeRef?
                 if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
                     if let d = descVal as? String, d.localizedCaseInsensitiveContains(desc) {
@@ -273,7 +227,6 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
             }
         }
     }
-    if scanned > 0 { lsaLog("\(scanned) buttons scanned, no '\(desc)'") }
     return nil
 }
 
