@@ -37,8 +37,6 @@
 
 - (instancetype)init;
 
-- (void) randomWallpapersLid;
-
 - (void)startWallpaperWithPath:(NSString *)videoPath
                     onDisplays:(NSArray<NSNumber *> *)displayIDs;
 
@@ -84,33 +82,10 @@
 
 -(BOOL)isFirstLaunch;
 
-- (void)checkWallpapers;
-
--(void) nextWallpaper;
-
--(void) startPlaylist;
-- (void)startWallpaperRotation;
-- (void)stopWallpaperRotation;
-
-
-
-
 @property(nonatomic, assign) BOOL generatingImages;
 @property(nonatomic, assign) BOOL generatingThumbImages;
 @property(nonatomic, strong) NSString *currentVideoPath;
 @property(nonatomic, assign) std::list<pid_t> daemonPIDs;
-@property(nonatomic, assign) NSMutableArray<NSString* >* wallpaperList;
-@property(assign) int currentWallpaper;
-@property (nonatomic, strong) NSTimer *wallpaperTimer;
-typedef NS_ENUM(NSInteger, RotationType) {
-    RotationTypeSequential = 1,
-    RotationTypeRandom = 2
-};
-
-@property (nonatomic, assign) RotationType rotationType;
-@property (nonatomic, assign) bool isrotationrunning;
-@property (assign) int rotationDelay;
-
 
 @end
 

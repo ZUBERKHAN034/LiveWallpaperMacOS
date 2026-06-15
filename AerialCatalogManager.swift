@@ -90,6 +90,23 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
         UserDefaults.standard.set(true, forKey: Self.onboardingKey)
     }
 
+    /// Removes the last-synced wallpaper entry from the lock-screen catalog.
+    /// Reads LastWallpaperPath from UserDefaults to determine the asset ID.
+    /// No-op if nothing was ever synced or on unsupported OS versions.
+    @objc func removeSyncedEntry() {
+        guard isTahoeOrLater else { return }
+        guard let lastPath = UserDefaults.standard.string(forKey: "LastWallpaperPath"),
+              !lastPath.isEmpty else {
+            NSLog("[AerialCatalog] removeSyncedEntry: no last wallpaper path, nothing to remove")
+            return
+        }
+        Task { [weak self] in
+            await self?.gate.enqueue { [weak self] in
+                await self?.performRemoval(lastVideoPath: lastPath)
+            }
+        }
+    }
+
     // ── OS version detection ──────────────────────────────────────────
 
     private var isTahoeOrLater: Bool {
@@ -581,6 +598,55 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
             try? task.run()
             task.waitUntilExit()
         }
+    }
+
+    // ── Removal logic ────────────────────────────────────────────────
+
+    private func performRemoval(lastVideoPath: String) async {
+        guard let base = aerialsBaseURL() else { return }
+
+        let videosDir     = base.appendingPathComponent("videos")
+        let thumbnailsDir = base.appendingPathComponent("thumbnails")
+        let manifestPath  = base.appendingPathComponent("manifest/entries.json")
+
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: manifestPath.path) else { return }
+
+        let canonicalPath = URL(fileURLWithPath: lastVideoPath).resolvingSymlinksInPath().path
+        let assetID = Self.uuidv5(for: canonicalPath)
+
+        // Remove asset from entries.json
+        guard let data = try? Data(contentsOf: manifestPath),
+              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        var assets: [[String: Any]] = root["assets"] as? [[String: Any]] ?? []
+        var categories: [[String: Any]] = root["categories"] as? [[String: Any]] ?? []
+
+        // Remove matching asset
+        assets.removeAll(where: { ($0["id"] as? String) == assetID })
+
+        // Check if any remaining assets use our category — if not, remove category
+        let hasRemaining = assets.contains(where: { asset in
+            guard let cats = asset["categories"] as? [String] else { return false }
+            return cats.contains(Self.categoryID)
+        })
+        if !hasRemaining {
+            categories.removeAll(where: { ($0["id"] as? String) == Self.categoryID })
+        }
+
+        root["assets"] = assets
+        root["categories"] = categories
+
+        guard let outData = try? JSONSerialization.data(withJSONObject: root, options: .prettyPrinted) else { return }
+        try? outData.write(to: manifestPath)
+
+        // Delete video & thumbnail files
+        try? fm.removeItem(at: videosDir.appendingPathComponent("\(assetID).mov"))
+        try? fm.removeItem(at: thumbnailsDir.appendingPathComponent("\(assetID).png"))
+
+        NSLog("[AerialCatalog] removed entry for asset %@", assetID)
+
+        kickTahoe()
     }
 
     // ── Sequoia path (macOS 14-15) — stubbed ─────────────────────────

@@ -42,4 +42,9 @@ final class AerialCatalogBridge: NSObject {
     @objc static func markOnboardingShown() {
         AerialCatalogManager.shared.markOnboardingShown()
     }
+
+    /// Removes the last-synced lock-screen entry from the aerial catalog.
+    @objc static func removeSyncedEntry() {
+        AerialCatalogManager.shared.removeSyncedEntry()
+    }
 }

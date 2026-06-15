@@ -119,9 +119,8 @@ enum L {
     static let scaleStretch = NSLocalizedString("Scale stretch", comment: "")
     static let scaleCenter = NSLocalizedString("Scale center", comment: "")
     static let scaleHeightFill = NSLocalizedString("Scale height fill", comment: "")
-    static let randomOnStartup = NSLocalizedString("Random on startup", comment: "")
-    static let randomOnLid = NSLocalizedString("Random on lid", comment: "")
     static let pauseWhenActive = NSLocalizedString("Pause when active", comment: "")
+    static let lockscreenSync = NSLocalizedString("Apply same wallpaper to lock screen", comment: "")
     static let videoVolume = NSLocalizedString("Video volume", comment: "")
     static let optimizeCodecs = NSLocalizedString("Optimize codecs", comment: "")
     static let optimize = NSLocalizedString("Optimize", comment: "")
@@ -132,29 +131,20 @@ enum L {
     static let selectFolderTitle = NSLocalizedString("Select folder title", comment: "")
     static let choose = NSLocalizedString("Choose", comment: "")
     static let selectFolderOrType = NSLocalizedString("Select folder or type", comment: "")
-    static let wallpaperRotation = NSLocalizedString("Wallpaper rotation", comment: "")
-    static let rotationType = NSLocalizedString("Wallpaper rotation type", comment: "")
     static let vinttageBar = NSLocalizedString(
         "Vignette bar (Reapply the wallpaper after change)", comment: "")
-
-    static let rotationDelay = NSLocalizedString("Wallpaper rotation delay", comment: "")
 }
 
 // MARK: - UserDefaults Keys
 enum UserDefaultsKeys {
     static let wallpaperFolder = "WallpaperFolder"
     static let scaleMode = "scale_mode"
-    static let randomOnStartup = "random"
-    static let randomOnLid = "random_lid"
     static let pauseOnAppFocus = "pauseOnAppFocus"
     static let volumePercentage = "wallpapervolumeprecentage"
     static let launchAtLogin = "LaunchAtLogin"
     static let appLanguage = "app_language"
     static let vignetteBar = "vinttage_bar"
-    static let rotation = "rotation"
-    static let rdelay = "rdelay"
-    static let rtype = "rtype"
-
+    static let lockscreenSync = "lockscreen_sync"
 }
 
 // MARK: - Main Content View
@@ -493,8 +483,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showFolderPicker = false
     @AppStorage(UserDefaultsKeys.scaleMode) var scaleMode: Int = 0
-    @State private var localMinutes: Int = 60
-    @State private var isShowingView = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -578,41 +566,6 @@ struct SettingsView: View {
 
                     Divider()
 
-                    // Random Wallpaper on Startup
-                    SettingRow(title: L.randomOnStartup) {
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: {
-                                    UserDefaults.standard.bool(
-                                        forKey: UserDefaultsKeys.randomOnStartup)
-                                },
-                                set: {
-                                    UserDefaults.standard.set(
-                                        $0, forKey: UserDefaultsKeys.randomOnStartup)
-                                }
-                            )
-                        )
-                        .toggleStyle(.switch)
-                    }
-
-                    // Random Wallpaper on Wakeup
-                    SettingRow(title: L.randomOnLid) {
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: {
-                                    UserDefaults.standard.bool(forKey: UserDefaultsKeys.randomOnLid)
-                                },
-                                set: {
-                                    UserDefaults.standard.set(
-                                        $0, forKey: UserDefaultsKeys.randomOnLid)
-                                }
-                            )
-                        )
-                        .toggleStyle(.switch)
-                    }
-
                     // Auto-Pause When App is Active
                     SettingRow(title: L.pauseWhenActive) {
                         Toggle(
@@ -650,97 +603,28 @@ struct SettingsView: View {
 
                     Divider()
 
-                    SettingRow(title: L.wallpaperRotation) {
+                    // Apply to Lock Screen
+                    SettingRow(title: L.lockscreenSync) {
                         Toggle(
                             "",
                             isOn: Binding(
                                 get: {
-                                    UserDefaults.standard.bool(forKey: UserDefaultsKeys.rotation)
+                                    UserDefaults.standard.bool(forKey: UserDefaultsKeys.lockscreenSync)
                                 },
                                 set: { newValue in
-                                    guard let engine = sharedEngine else { return }
-
-                                    engine.isrotationrunning = newValue
-                                    if newValue {
-
-                                        engine.startWallpaperRotation()
-
+                                    UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.lockscreenSync)
+                                    if newValue, let engine = sharedEngine {
+                                        let path = engine.currentVideoPath
+                                        if let path = path, path.count > 0 {
+                                            AerialCatalogBridge.syncVideo(path)
+                                        }
                                     } else {
-                                        engine.stopWallpaperRotation()
+                                        AerialCatalogBridge.removeSyncedEntry()
                                     }
-                                    UserDefaults.standard.set(
-                                        newValue, forKey: UserDefaultsKeys.rotation)
                                 }
                             )
-                        ).toggleStyle(.switch)
-
-                    }
-
-                    SettingRow(title: L.rotationDelay) {
-                        HStack(spacing: 8) {
-                            // 1. The Typeable Field
-                            TextField("", value: $localMinutes, format: .number)
-                                .textFieldStyle(.plain)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 40)  // Keeps it compact
-                                .onSubmit {
-                                    // Ensure the typed value stays within your bounds
-                                    localMinutes = min(max(localMinutes, 1), 1440)
-                                }
-
-                            // 2. The Stepper (with an empty label)
-                            Stepper("", value: $localMinutes, in: 1...1440, step: 4)
-                                .labelsHidden()  // This hides the extra space Stepper usually takes
-                                .onChange(of: localMinutes) { newValue in
-                                    sharedEngine?.rotationDelay = Int32(newValue * 60)
-                                    UserDefaults.standard.set(
-                                        (newValue * 60), forKey: UserDefaultsKeys.rdelay)
-                                    print("Delay updated to: \(sharedEngine?.rotationDelay ?? 0)")
-                                }
-
-                            // 3. The Formatted Unit
-                            Text(formatTime(localMinutes))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .fixedSize()
-                        }
-
-                    }
-
-                    .onAppear {
-                        if let engine = sharedEngine {
-                            localMinutes =
-                                UserDefaults.standard.integer(forKey: UserDefaultsKeys.rdelay) / 60
-                        }
-                    }
-
-                    if let engine = sharedEngine {
-                        SettingRow(title: L.rotationType) {
-                            Picker(
-                                "",
-                                selection: Binding(
-                                    get: { engine.rotationType },
-                                    set: { newValue in
-                                        engine.rotationType = newValue
-
-                                    }
-                                )
-                            ) {
-                                Text("Sequential").tag(RotationType.sequential)
-                                Text("Random").tag(RotationType.random)
-                            }
-                            .onChange(of: engine.rotationType) {
-                                if engine.rotationType == RotationType.sequential {
-                                    UserDefaults.standard.set(1, forKey: UserDefaultsKeys.rtype)
-                                } else {
-                                    UserDefaults.standard.set(2, forKey: UserDefaultsKeys.rtype)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 150)
-                        }
-                    } else {
-                        Text("Engine Loading...")  // Or EmptyView()
+                        )
+                        .toggleStyle(.switch)
                     }
 
                     Divider()
@@ -791,14 +675,6 @@ struct SettingsView: View {
         .background(.ultraThinMaterial)
         .compatibleGlass(cornerRadius: 1)
 
-    }
-    func formatTime(_ totalMinutes: Int) -> String {
-        let h = totalMinutes / 60
-        let m = totalMinutes % 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        }
-        return "\(m) min"
     }
 
     private func selectFolder() {
@@ -920,7 +796,6 @@ class WallpaperViewModel: ObservableObject {
     @Published var displays: [DisplayObjc] = []
     @Published var folderPath: String = ""
     @Published var scaleMode: String = "fill"
-    @Published var randomOnStartup: Bool = false
     @Published var pauseOnAppFocus: Bool = true
     @Published var volume: Double = 50.0
     @Published var vinttageBar: Bool = true
@@ -943,7 +818,6 @@ class WallpaperViewModel: ObservableObject {
     func loadSettings() {
         folderPath = engine.getFolderPath()
         scaleMode = defaults.string(forKey: UserDefaultsKeys.scaleMode) ?? "fill"
-        randomOnStartup = defaults.bool(forKey: UserDefaultsKeys.randomOnStartup)
         pauseOnAppFocus = defaults.bool(forKey: UserDefaultsKeys.pauseOnAppFocus)
         volume = Double(defaults.float(forKey: UserDefaultsKeys.volumePercentage))
         vinttageBar = defaults.bool(forKey: UserDefaultsKeys.vignetteBar)
