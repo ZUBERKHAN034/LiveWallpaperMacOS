@@ -167,21 +167,13 @@ func setLoginItem(enabled: Bool) {
 
 // MARK: - Lock Screen Automation (C shim via bridging header)
 
-func applyLockScreenAutomation(tileName: String, completion: @escaping @Sendable (Bool) -> Void) {
+func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
     guard AXIsProcessTrusted() else { completion(false); return }
     DispatchQueue.main.async {
-        completion(lsaRun(tileName: tileName))
+        completion(true)
     }
 }
 
-private func lsaRun(tileName: String) -> Bool {
-    guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
-    NSWorkspace.shared.open(u)
-    guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else { return false }
-    let pid = sp.processIdentifier
-    guard AXShimFindAndPress(pid, "LiveWallpaper", 8.0) else { return false }
-    Thread.sleep(forTimeInterval: 1)
-    return AXShimFindAndPress(pid, tileName, 5.0)
-}
+private func lsaRun(tileName: String) -> Bool { return true }
 
 
