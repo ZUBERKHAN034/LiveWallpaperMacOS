@@ -177,7 +177,11 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
 private func lsaRun(tileName: String) -> Bool {
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
     NSWorkspace.shared.open(u)
-    return true
+    guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else { return false }
+    let pid = sp.processIdentifier
+    guard AXShimFindAndPress(pid, "LiveWallpaper", 8.0) else { return false }
+    Thread.sleep(forTimeInterval: 1)
+    return AXShimFindAndPress(pid, tileName, 5.0)
 }
 
 
