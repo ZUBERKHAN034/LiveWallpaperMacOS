@@ -169,19 +169,71 @@ func setLoginItem(enabled: Bool) {
 
 func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
     guard AXIsProcessTrusted() else { completion(false); return }
-    DispatchQueue.main.async {
-        completion(true)
+    guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
+        completion(false); return
+    }
+    NSWorkspace.shared.open(u)
+    let tn = tileName
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else {
+            completion(false); return
+        }
+        let pid = sp.processIdentifier
+        let app = AXUIElementCreateApplication(pid)
+        if !lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 8) { completion(false); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            let ok = lsaFindAndPress(app: app, desc: tn, timeout: 5)
+            completion(ok)
+        }
     }
 }
 
-private func lsaRun(tileName: String) -> Bool {
-    guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
-    NSWorkspace.shared.open(u)
-    guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else { return false }
-    let pid = sp.processIdentifier
-    guard AXShimFindAndPress(pid, "LiveWallpaper", 8.0) else { return false }
-    Thread.sleep(forTimeInterval: 1)
-    return AXShimFindAndPress(pid, tileName, 5.0)
+private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) -> Bool {
+    let deadline = Date().timeIntervalSince1970 + timeout
+    while Date().timeIntervalSince1970 < deadline {
+        var windowsVal: CFTypeRef?
+        if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsVal) == .success {
+            if let arr = windowsVal as? [AXUIElement] {
+                for win in arr {
+                    var titleVal: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(win, kAXTitleAttribute as CFString, &titleVal) == .success {
+                        if let title = titleVal as? String, title.localizedCaseInsensitiveContains("wallpaper") {
+                            if let btn = findButton(in: win, desc: desc) {
+                                return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.3))
+    }
+    return false
+}
+
+private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
+    var queue = [root]
+    while !queue.isEmpty {
+        let cur = queue.removeFirst()
+        var roleVal: CFTypeRef?
+        if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
+            if let role = roleVal as? String, role == (kAXButtonRole as String) {
+                var descVal: CFTypeRef?
+                if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
+                    if let d = descVal as? String, d.localizedCaseInsensitiveContains(desc) {
+                        return cur
+                    }
+                }
+            }
+        }
+        var kidsVal: CFTypeRef?
+        if AXUIElementCopyAttributeValue(cur, kAXChildrenAttribute as CFString, &kidsVal) == .success {
+            if let kids = kidsVal as? [AXUIElement] {
+                queue.append(contentsOf: kids)
+            }
+        }
+    }
+    return nil
 }
 
 
