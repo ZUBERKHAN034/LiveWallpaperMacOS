@@ -238,17 +238,11 @@ private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) ->
     var iterations = 0
     while Date().timeIntervalSince1970 < deadline {
         iterations += 1
-        var windowsVal: CFTypeRef?
-        let err = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsVal)
-        let arr = (windowsVal as? [AXUIElement]) ?? []
-        if iterations == 1 { lsaLog("iter1 windows err=\(err.rawValue) count=\(arr.count)") }
-        if err == .success && arr.count > 0 {
-            for win in arr {
-                if let btn = findButton(in: win, desc: desc) {
-                    return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
-                }
-            }
+        if let btn = findButton(in: app, desc: desc) {
+            lsaLog("FOUND '\(desc)' at iter=\(iterations)")
+            return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
         }
+        if iterations == 1 { lsaLog("iter1 no match yet for '\(desc)'") }
         RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
     }
     lsaLog("TIMEOUT '\(desc)' after \(iterations) iters")
