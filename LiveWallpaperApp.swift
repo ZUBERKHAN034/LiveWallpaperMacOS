@@ -254,11 +254,15 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
             if let role = roleVal as? String, role == (kAXButtonRole as String) {
-                var descVal: CFTypeRef?
-                if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
-                    if let d = descVal as? String, d.localizedCaseInsensitiveContains(desc) {
-                        return cur
-                    }
+                var descVal: CFTypeRef?, titleVal: CFTypeRef?
+                AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal)
+                AXUIElementCopyAttributeValue(cur, kAXTitleAttribute as CFString, &titleVal)
+                let d = (descVal as? String) ?? ""
+                let t = (titleVal as? String) ?? ""
+                if d.localizedCaseInsensitiveContains(desc) || t.localizedCaseInsensitiveContains(desc) {
+                    // Only match if it's NOT the sidebar "LiveWallpaper" category button when looking for a tile
+                    if desc != "LiveWallpaper" && d == "LiveWallpaper" { continue }
+                    return cur
                 }
             }
         }
