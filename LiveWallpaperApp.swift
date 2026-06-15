@@ -164,6 +164,7 @@ func setLoginItem(enabled: Bool) {
     }
 }
 
+
 // MARK: - Lock Screen Automation (C shim via bridging header)
 
 func applyLockScreenAutomation(tileName: String, completion: @escaping @Sendable (Bool) -> Void) {
@@ -173,7 +174,7 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping @Sendable
     }
 }
 
-func lsaRun(tileName: String) -> Bool {
+private func lsaRun(tileName: String) -> Bool {
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
     NSWorkspace.shared.open(u)
     guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else { return false }
