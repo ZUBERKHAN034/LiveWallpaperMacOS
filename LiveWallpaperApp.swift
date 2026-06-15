@@ -188,8 +188,11 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
             completion(false); return
         }
         lsaLog("step1 OK, scheduling step2 after 2s")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            let ok = lsaFindAndPress(app: app, desc: tn, timeout: 10)
+        lsaLog("step1 OK, scheduling step2 after 3s")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            let app2 = AXUIElementCreateApplication(pid)
+            lsaLog("step2 starting, fresh AXUIElement")
+            let ok = lsaFindAndPress(app: app2, desc: tn, timeout: 15)
             completion(ok)
         }
     }
