@@ -23,6 +23,7 @@
 		04E057192EEAB3EE00F90A44 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E0565F2EEAB3EE00F90A44 /* ContentView.swift */; };
 		B1000001001 /* AerialCatalogManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001001 /* AerialCatalogManager.swift */; };
 		B1000001002 /* AerialCatalogBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001002 /* AerialCatalogBridge.swift */; };
+		CC10000002 /* ax_shim.c in Sources */ = {isa = PBXBuildFile; fileRef = CC20000002 /* ax_shim.c */; };
 		AA10000001 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA20000001 /* ApplicationServices.framework */; };
 		04E0571C2EEAB3EE00F90A44 /* SaveSystem.mm in Sources */ = {isa = PBXBuildFile; fileRef = 04E0566C2EEAB3EE00F90A44 /* SaveSystem.mm */; };
 		04E057382EEAB3EE00F90A44 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 04E0565D2EEAB3EE00F90A44 /* Assets.xcassets */; };
@@ -276,6 +277,8 @@
 		04F816DF2EEBE3FB00CFB473 /* DisplayObjc.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DisplayObjc.mm; sourceTree = SOURCE_ROOT; };
 		B2000001001 /* AerialCatalogManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerialCatalogManager.swift; sourceTree = SOURCE_ROOT; };
 		B2000001002 /* AerialCatalogBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerialCatalogBridge.swift; sourceTree = SOURCE_ROOT; };
+		CC20000002 /* ax_shim.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ax_shim.c; sourceTree = SOURCE_ROOT; };
+		CC20000001 /* ax_shim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ax_shim.h; sourceTree = SOURCE_ROOT; };
 		AA20000001 /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -352,6 +355,8 @@
 				04E0565D2EEAB3EE00F90A44 /* Assets.xcassets */,
 				B2000001001 /* AerialCatalogManager.swift */,
 				B2000001002 /* AerialCatalogBridge.swift */,
+				CC20000002 /* ax_shim.c */,
+				CC20000001 /* ax_shim.h */,
 				04E0565F2EEAB3EE00F90A44 /* ContentView.swift */,
 				04E056612EEAB3EE00F90A44 /* DisplayManager.h */,
 				04E056662EEAB3EE00F90A44 /* LiveWallpaper-Bridging-Header.h */,
@@ -762,6 +767,7 @@
 				04E057192EEAB3EE00F90A44 /* ContentView.swift in Sources */,
 				B1000001001 /* AerialCatalogManager.swift in Sources */,
 				B1000001002 /* AerialCatalogBridge.swift in Sources */,
+				CC10000002 /* ax_shim.c in Sources */,
 				04E0571C2EEAB3EE00F90A44 /* SaveSystem.mm in Sources */,
 			);
 		};

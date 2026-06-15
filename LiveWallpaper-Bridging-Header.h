@@ -21,5 +21,6 @@
 
 #import "WallpaperEngine.h"
 #import "DisplayObjc.h"
+#import "ax_shim.h"
 
 #endif /* LiveWallpaper_Bridging_Header_h */
