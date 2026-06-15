@@ -174,6 +174,10 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
     }
 }
 
-private func lsaRun(tileName: String) -> Bool { return true }
+private func lsaRun(tileName: String) -> Bool {
+    guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else { return false }
+    NSWorkspace.shared.open(u)
+    return true
+}
 
 
