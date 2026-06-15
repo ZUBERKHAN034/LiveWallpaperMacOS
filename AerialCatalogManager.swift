@@ -57,6 +57,7 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
 
     // MARK: - UserDefaults keys
     private static let onboardingKey = "hasShownAerialOnboarding"
+    private static let lastSyncedPathKey = "LastSyncedVideoPath"
 
     /// Notification posted (on main) when a lock-screen sync succeeds.
     /// Useful for triggering a one-time onboarding hint.
@@ -176,14 +177,18 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
         let targetVideo = videosDir.appendingPathComponent("\(assetID).mov")
         let targetThumb = thumbnailsDir.appendingPathComponent("\(assetID).png")
 
+        // ── Remove previous entry before installing the new one ──────
+        // Ensures at most one LiveWallpaper asset exists in the catalog,
+        // so toggle-OFF removal is complete rather than leaving orphans.
+        if let previousPath = UserDefaults.standard.string(forKey: Self.lastSyncedPathKey),
+           previousPath != canonicalPath {
+            removeAssetEntry(manifestPath: manifestPath,
+                             canonicalPath: previousPath,
+                             videosDir: videosDir,
+                             thumbnailsDir: thumbnailsDir)
+        }
+
         // ── Transcode to HEVC Main10 (matching phonto pipeline) ───────
-        // NOTE: Each wallpaper pick creates a new transcode (~15Mbps HEVC).
-        // Old entries accumulate in entries.json and aerials/ on disk.
-        // A future "keep last N" eviction policy should remove stale UUIDs
-        // from entries.json and delete their .mov/.png files. For now,
-        // re-picking the same video path updates the same entry (UUIDv5
-        // derived from path is stable), so only one entry per unique
-        // source path accumulates regardless of how many times you pick it.
         NSLog("[AerialCatalog] transcoding → HEVC Main10 (2 temporal sub-layers)...")
         if !(await transcodeVideo(source: videoURL, dest: targetVideo)) {
             NSLog("[AerialCatalog] transcode failed for %@", videoURL.lastPathComponent)
@@ -216,6 +221,9 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
         kickTahoe()
 
         NSLog("[AerialCatalog] synced '%@' for lock screen (id %@)", name, assetID)
+
+        // Track this as the last-synced path so the next install can clean up
+        UserDefaults.standard.set(canonicalPath, forKey: Self.lastSyncedPathKey)
 
         await MainActor.run {
             NotificationCenter.default.post(name: Self.didSyncNotification, object: nil)
@@ -602,6 +610,54 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
 
     // ── Removal logic ────────────────────────────────────────────────
 
+    /// Removes a single asset from entries.json and deletes its files.
+    /// Called both from the pre-install cleanup path (enforcing one entry
+    /// at a time) and from the explicit removeSyncedEntry toggle-OFF path.
+    /// Does NOT kick wallpaper services — callers should kick afterward.
+    private func removeAssetEntry(manifestPath: URL,
+                                   canonicalPath: String,
+                                   videosDir: URL,
+                                   thumbnailsDir: URL) {
+        let assetID = Self.uuidv5(for: canonicalPath)
+        let fm = FileManager.default
+
+        guard let data = try? Data(contentsOf: manifestPath),
+              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            NSLog("[AerialCatalog] removeAssetEntry: failed to parse manifest")
+            return
+        }
+
+        var assets: [[String: Any]] = root["assets"] as? [[String: Any]] ?? []
+        var categories: [[String: Any]] = root["categories"] as? [[String: Any]] ?? []
+
+        let before = assets.count
+        assets.removeAll(where: { ($0["id"] as? String) == assetID })
+        if assets.count < before {
+            // Check if any remaining assets use our category
+            let hasRemaining = assets.contains(where: { asset in
+                guard let cats = asset["categories"] as? [String] else { return false }
+                return cats.contains(Self.categoryID)
+            })
+            if !hasRemaining {
+                categories.removeAll(where: { ($0["id"] as? String) == Self.categoryID })
+            }
+
+            root["assets"] = assets
+            root["categories"] = categories
+
+            if let outData = try? JSONSerialization.data(withJSONObject: root, options: .prettyPrinted) {
+                try? outData.write(to: manifestPath)
+            }
+
+            try? fm.removeItem(at: videosDir.appendingPathComponent("\(assetID).mov"))
+            try? fm.removeItem(at: thumbnailsDir.appendingPathComponent("\(assetID).png"))
+
+            NSLog("[AerialCatalog] removed stale entry for asset %@", assetID)
+        } else {
+            NSLog("[AerialCatalog] no entry found for asset %@ to remove", assetID)
+        }
+    }
+
     private func performRemoval(lastVideoPath: String) async {
         guard let base = aerialsBaseURL() else { return }
 
@@ -613,38 +669,14 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
         guard fm.fileExists(atPath: manifestPath.path) else { return }
 
         let canonicalPath = URL(fileURLWithPath: lastVideoPath).resolvingSymlinksInPath().path
-        let assetID = Self.uuidv5(for: canonicalPath)
 
-        // Remove asset from entries.json
-        guard let data = try? Data(contentsOf: manifestPath),
-              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        removeAssetEntry(manifestPath: manifestPath,
+                         canonicalPath: canonicalPath,
+                         videosDir: videosDir,
+                         thumbnailsDir: thumbnailsDir)
 
-        var assets: [[String: Any]] = root["assets"] as? [[String: Any]] ?? []
-        var categories: [[String: Any]] = root["categories"] as? [[String: Any]] ?? []
-
-        // Remove matching asset
-        assets.removeAll(where: { ($0["id"] as? String) == assetID })
-
-        // Check if any remaining assets use our category — if not, remove category
-        let hasRemaining = assets.contains(where: { asset in
-            guard let cats = asset["categories"] as? [String] else { return false }
-            return cats.contains(Self.categoryID)
-        })
-        if !hasRemaining {
-            categories.removeAll(where: { ($0["id"] as? String) == Self.categoryID })
-        }
-
-        root["assets"] = assets
-        root["categories"] = categories
-
-        guard let outData = try? JSONSerialization.data(withJSONObject: root, options: .prettyPrinted) else { return }
-        try? outData.write(to: manifestPath)
-
-        // Delete video & thumbnail files
-        try? fm.removeItem(at: videosDir.appendingPathComponent("\(assetID).mov"))
-        try? fm.removeItem(at: thumbnailsDir.appendingPathComponent("\(assetID).png"))
-
-        NSLog("[AerialCatalog] removed entry for asset %@", assetID)
+        // Clear tracking so re-enabling doesn't try to remove the same entry again
+        UserDefaults.standard.removeObject(forKey: Self.lastSyncedPathKey)
 
         kickTahoe()
     }
