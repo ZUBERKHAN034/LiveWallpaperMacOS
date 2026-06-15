@@ -187,36 +187,64 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
         guard lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 10) else {
             completion(false); return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            let ok = lsaFindAndPress(app: app, desc: tn, timeout: 5)
+        lsaLog("step1 OK, scheduling step2 after 2s")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            let ok = lsaFindAndPress(app: app, desc: tn, timeout: 10)
             completion(ok)
         }
     }
 }
 
+private func lsaLog(_ msg: String) {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("lsa_debug.log")
+    let line = "[LSA] \(msg)\n"
+    if let fh = try? FileHandle(forWritingTo: url) {
+        _ = try? fh.seekToEnd()
+        try? fh.write(contentsOf: Data(line.utf8))
+        try? fh.close()
+    } else {
+        try? Data(line.utf8).write(to: url, options: .atomic)
+    }
+}
+
 private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) -> Bool {
     let deadline = Date().timeIntervalSince1970 + timeout
+    var its = 0
     while Date().timeIntervalSince1970 < deadline {
+        its += 1
         if let btn = findButton(in: app, desc: desc) {
+            var dVal: CFTypeRef?, tVal: CFTypeRef?, rVal: CFTypeRef?
+            AXUIElementCopyAttributeValue(btn, kAXDescriptionAttribute as CFString, &dVal)
+            AXUIElementCopyAttributeValue(btn, kAXTitleAttribute as CFString, &tVal)
+            AXUIElementCopyAttributeValue(btn, kAXRoleAttribute as CFString, &rVal)
+            let d = (dVal as? String) ?? "?"
+            let t = (tVal as? String) ?? "?"
+            let r = (rVal as? String) ?? "?"
+            lsaLog("PRESS '\(desc)' matched desc='\(d)' title='\(t)' role='\(r)' iter=\(its)")
             return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
         }
         RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
     }
+    lsaLog("TIMEOUT '\(desc)' after \(its) iters")
     return false
 }
 
 private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
     var queue = [root]
+    var allButtons: [String] = []
     while !queue.isEmpty {
         let cur = queue.removeFirst()
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
             if let role = roleVal as? String, role == (kAXButtonRole as String) {
-                var descVal: CFTypeRef?
-                if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
-                    if let d = descVal as? String, d.localizedCaseInsensitiveContains(desc) {
-                        return cur
-                    }
+                var descVal: CFTypeRef?, titleVal: CFTypeRef?
+                AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal)
+                AXUIElementCopyAttributeValue(cur, kAXTitleAttribute as CFString, &titleVal)
+                let d = (descVal as? String) ?? ""
+                let t = (titleVal as? String) ?? ""
+                allButtons.append("desc='\(d)' title='\(t)'")
+                if d.localizedCaseInsensitiveContains(desc) || t.localizedCaseInsensitiveContains(desc) {
+                    return cur
                 }
             }
         }
@@ -227,6 +255,7 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
             }
         }
     }
+    lsaLog("scanned \(allButtons.count) buttons for '\(desc)': \(allButtons.joined(separator: " | "))")
     return nil
 }
 
