@@ -245,21 +245,21 @@ private func lsaFindButton(app: AXUIElement, desc: String, timeout: Double) -> A
 }
 
 private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
+    let tokens = desc.lowercased().components(separatedBy: CharacterSet(charactersIn: "-_. "))
     var queue = [root]
     while !queue.isEmpty {
         let cur = queue.removeFirst()
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
             if let role = roleVal as? String, role == (kAXButtonRole as String) {
-                var descVal: CFTypeRef?, titleVal: CFTypeRef?
-                AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal)
-                AXUIElementCopyAttributeValue(cur, kAXTitleAttribute as CFString, &titleVal)
-                let d = (descVal as? String) ?? ""
-                let t = (titleVal as? String) ?? ""
-                if d.localizedCaseInsensitiveContains(desc) || t.localizedCaseInsensitiveContains(desc) {
-                    // Only match if it's NOT the sidebar "LiveWallpaper" category button when looking for a tile
-                    if desc != "LiveWallpaper" && d == "LiveWallpaper" { continue }
-                    return cur
+                var descVal: CFTypeRef?
+                if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
+                    let d = (descVal as? String) ?? ""
+                    let lower = d.lowercased()
+                    // exact substring match first
+                    if lower.contains(desc.lowercased()) { return cur }
+                    // fallback: all tokens must appear in description
+                    if tokens.allSatisfy({ lower.contains($0) }) { return cur }
                 }
             }
         }
