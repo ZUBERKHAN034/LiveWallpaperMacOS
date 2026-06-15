@@ -23,6 +23,7 @@
 		04E057192EEAB3EE00F90A44 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E0565F2EEAB3EE00F90A44 /* ContentView.swift */; };
 		B1000001001 /* AerialCatalogManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001001 /* AerialCatalogManager.swift */; };
 		B1000001002 /* AerialCatalogBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001002 /* AerialCatalogBridge.swift */; };
+		AA10000001 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA20000001 /* ApplicationServices.framework */; };
 		04E0571C2EEAB3EE00F90A44 /* SaveSystem.mm in Sources */ = {isa = PBXBuildFile; fileRef = 04E0566C2EEAB3EE00F90A44 /* SaveSystem.mm */; };
 		04E057382EEAB3EE00F90A44 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 04E0565D2EEAB3EE00F90A44 /* Assets.xcassets */; };
 		04E057742EEAB43200F90A44 /* emitterstate.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04E0574A2EEAB43200F90A44 /* emitterstate.cpp */; };
@@ -275,6 +276,7 @@
 		04F816DF2EEBE3FB00CFB473 /* DisplayObjc.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DisplayObjc.mm; sourceTree = SOURCE_ROOT; };
 		B2000001001 /* AerialCatalogManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerialCatalogManager.swift; sourceTree = SOURCE_ROOT; };
 		B2000001002 /* AerialCatalogBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerialCatalogBridge.swift; sourceTree = SOURCE_ROOT; };
+		AA20000001 /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -289,6 +291,7 @@
 		04E007072EEA738C00F90A44 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				AA10000001 /* ApplicationServices.framework in Frameworks */,
 				04E055482EEA795F00F90A44 /* CoreGraphics.framework in Frameworks */,
 				04E055462EEA795900F90A44 /* CoreVideo.framework in Frameworks */,
 				04E055442EEA795200F90A44 /* CoreMedia.framework in Frameworks */,
