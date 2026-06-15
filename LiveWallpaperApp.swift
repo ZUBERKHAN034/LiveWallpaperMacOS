@@ -205,14 +205,19 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
     NSWorkspace.shared.open(u)
     let tn = tileName
     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+        for ra in NSWorkspace.shared.runningApplications {
+            if let bid = ra.bundleIdentifier {
+                lsaLog("running: \(bid) pid=\(ra.processIdentifier)")
+            }
+        }
         var pid: pid_t = -1
-        for _ in 0..<10 {
+        for _ in 0..<20 {
             if let p = NSWorkspace.shared.runningApplications.first(where: {
-                $0.bundleIdentifier == "com.apple.Wallpaper-Settings.extension"
+                $0.bundleIdentifier == "com.apple.systempreferences"
             })?.processIdentifier { pid = p; break }
             RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
         }
-        guard pid != -1 else { lsaLog("ext not found"); completion(false); return }
+        guard pid != -1 else { lsaLog("System Settings not found"); completion(false); return }
         let app = AXUIElementCreateApplication(pid)
         lsaLog("step1 LiveWallpaper pid=\(pid)")
         lsaDumpTree(app)
