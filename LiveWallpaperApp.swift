@@ -20,9 +20,6 @@ import SwiftUI
 import AppKit
 import ApplicationServices
 import ServiceManagement
-import OSLog
-
-private let lsaLog = OSLog(subsystem: "com.zacy.livewallpaper", category: "LockScreen")
 
 let sharedEngine = WallpaperEngine.shared()
 
@@ -168,35 +165,35 @@ func setLoginItem(enabled: Bool) {
 }
 
 
-// MARK: - Lock Screen Automation (C shim via bridging header)
+// MARK: - Lock Screen Automation
 
 func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
-    guard AXIsProcessTrusted() else {
-        os_log("AX not trusted", log: lsaLog, type: .error)
-        completion(false); return
-    }
+    fputs("[LSA] START tile=\(tileName) trusted=\(AXIsProcessTrusted())\n", stderr)
+    guard AXIsProcessTrusted() else { completion(false); return }
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
         completion(false); return
     }
-    os_log("opening System Settings, tile=%{public}s", log: lsaLog, type: .info, tileName)
     NSWorkspace.shared.open(u)
     let tn = tileName
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-        guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else {
-            os_log("System Settings not running after 2s", log: lsaLog, type: .error)
-            completion(false); return
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+        var pid: pid_t = -1
+        for _ in 0..<10 {
+            if let p = NSWorkspace.shared.runningApplications.first(where: {
+                $0.bundleIdentifier == "com.apple.Wallpaper-Settings.extension"
+            })?.processIdentifier { pid = p; break }
+            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
         }
-        let pid = sp.processIdentifier
+        guard pid != -1 else { fputs("[LSA] ext not found\n", stderr); completion(false); return }
         let app = AXUIElementCreateApplication(pid)
-        os_log("step1: find+press 'LiveWallpaper'", log: lsaLog, type: .info)
-        if !lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 8) {
-            os_log("step1 FAILED", log: lsaLog, type: .error)
-            completion(false); return
+        fputs("[LSA] step1 LiveWallpaper pid=\(pid)\n", stderr)
+        lsaDumpTree(app)
+        guard lsaFindAndPress(app: app, desc: "LiveWallpaper", timeout: 10) else {
+            fputs("[LSA] step1 FAILED\n", stderr); completion(false); return
         }
-        os_log("step1 OK, waiting then step2: find+press '%{public}s'", log: lsaLog, type: .info, tn)
+        fputs("[LSA] step1 OK, scheduling step2\n", stderr)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             let ok = lsaFindAndPress(app: app, desc: tn, timeout: 5)
-            os_log("step2 result=%{public}d", log: lsaLog, type: .info, ok)
+            fputs("[LSA] step2 result=\(ok)\n", stderr)
             completion(ok)
         }
     }
@@ -204,37 +201,55 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
 
 private func lsaFindAndPress(app: AXUIElement, desc: String, timeout: Double) -> Bool {
     let deadline = Date().timeIntervalSince1970 + timeout
+    var iterations = 0
     while Date().timeIntervalSince1970 < deadline {
+        iterations += 1
         var windowsVal: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsVal)
         let arr = (windowsVal as? [AXUIElement]) ?? []
-        os_log("windows err=%{public}d count=%{public}d target=%{public}s", log: lsaLog, type: .debug, err.rawValue, arr.count, desc)
+        if iterations == 1 { fputs("[LSA] iter1 windows err=\(err.rawValue) count=\(arr.count)\n", stderr) }
         if err == .success && arr.count > 0 {
             for win in arr {
                 if let btn = findButton(in: win, desc: desc) {
-                    os_log("FOUND button '%{public}s' → press", log: lsaLog, type: .info, desc)
                     return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
                 }
             }
-            os_log("no button '%{public}s' found in any window", log: lsaLog, type: .debug, desc)
         }
-        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.3))
+        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
     }
-    os_log("TIMEOUT for '%{public}s'", log: lsaLog, type: .error, desc)
+    fputs("[LSA] TIMEOUT '\(desc)' after \(iterations) iters\n", stderr)
     return false
+}
+
+private func lsaDumpTree(_ elem: AXUIElement, _ prefix: String = "") {
+    var roleVal: CFTypeRef?, descVal: CFTypeRef?, titleVal: CFTypeRef?
+    AXUIElementCopyAttributeValue(elem, kAXRoleAttribute as CFString, &roleVal)
+    AXUIElementCopyAttributeValue(elem, kAXDescriptionAttribute as CFString, &descVal)
+    AXUIElementCopyAttributeValue(elem, kAXTitleAttribute as CFString, &titleVal)
+    let role = (roleVal as? String) ?? "?"
+    let desc = (descVal as? String) ?? ""
+    let title = (titleVal as? String) ?? ""
+    fputs("[LSA] \(prefix)\(role) desc='\(desc)' title='\(title)'\n", stderr)
+    var kidsVal: CFTypeRef?
+    if AXUIElementCopyAttributeValue(elem, kAXChildrenAttribute as CFString, &kidsVal) == .success {
+        if let kids = kidsVal as? [AXUIElement] {
+            for kid in kids { lsaDumpTree(kid, prefix + "  ") }
+        }
+    }
 }
 
 private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
     var queue = [root]
+    var scanned = 0
     while !queue.isEmpty {
         let cur = queue.removeFirst()
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
             if let role = roleVal as? String, role == (kAXButtonRole as String) {
+                scanned += 1
                 var descVal: CFTypeRef?
                 if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
                     if let d = descVal as? String, d.localizedCaseInsensitiveContains(desc) {
-                        os_log("found button desc='%{public}s'", log: lsaLog, type: .debug, d)
                         return cur
                     }
                 }
@@ -247,7 +262,7 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
             }
         }
     }
-    os_log("exhausted tree, no button matching '%{public}s'", log: lsaLog, type: .debug, desc)
+    if scanned > 0 { fputs("[LSA] \(scanned) buttons scanned, no '\(desc)'\n", stderr) }
     return nil
 }
 
