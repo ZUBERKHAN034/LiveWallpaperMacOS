@@ -220,6 +220,14 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
         // ── Kick the wallpaper service ────────────────────────────────
         kickTahoe()
 
+        // Retry loop: wait for WallpaperAgent to reload entries.json
+        var attempts = 0
+        while attempts < 10 {
+            try? await Task.sleep(for: .seconds(2))
+            if await selectFirstLiveWallpaperTile() { break }
+            attempts += 1
+        }
+
         NSLog("[AerialCatalog] synced '%@' for lock screen (id %@)", name, assetID)
 
         // Track this as the last-synced path so the next install can clean up

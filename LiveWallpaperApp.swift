@@ -167,66 +167,79 @@ func setLoginItem(enabled: Bool) {
 
 // MARK: - Lock Screen Automation
 
-func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
-    guard AXIsProcessTrusted() else { completion(false); return }
+func selectFirstLiveWallpaperTile() async -> Bool {
+    guard AXIsProcessTrusted() else { return false }
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
-        completion(false); return
+        return false
     }
     let settingsWasOpen = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.systempreferences" }
     NSWorkspace.shared.open(u)
-    let tn = tileName
-    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-        var pid: pid_t = -1
-        for _ in 0..<40 {
-            if let p = NSWorkspace.shared.runningApplications.first(where: {
-                $0.bundleIdentifier == "com.apple.systempreferences"
-            })?.processIdentifier { pid = p; break }
-            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.25))
-        }
-        guard pid != -1 else { completion(false); return }
-        let app = AXUIElementCreateApplication(pid)
-        let found = findTileButton(in: app, id: "\(tn);", timeout: 15)
-        if let tile = found {
-            let ok = AXUIElementPerformAction(tile, kAXPressAction as CFString) == .success
-            if ok && !settingsWasOpen {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    closeSettingsWindow(app: app)
-                }
-            }
-            completion(ok)
-        } else {
-            if !settingsWasOpen { closeSettingsWindow(app: app) }
-            completion(false)
-        }
-    }
-}
 
-private func findTileButton(in root: AXUIElement, id: String, timeout: TimeInterval) -> AXUIElement? {
-    let deadline = Date().timeIntervalSince1970 + timeout
+    var app: AXUIElement? = nil
+    for _ in 0..<40 {
+        if let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) {
+            app = AXUIElementCreateApplication(sp.processIdentifier)
+            break
+        }
+        try? await Task.sleep(for: .milliseconds(250))
+    }
+    guard let app = app else { return false }
+
+    // Poll for "LiveWallpaper" section header → tile
+    let deadline = Date().timeIntervalSince1970 + 15
     while Date().timeIntervalSince1970 < deadline {
-        if let btn = findButtonByID(in: root, id: id) { return btn }
-        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
+        if let tile = findFirstTileInLiveWallpaperSection(app) {
+            guard AXUIElementPerformAction(tile, kAXPressAction as CFString) == .success else { return false }
+            if !settingsWasOpen {
+                try? await Task.sleep(for: .seconds(1))
+                closeSettingsWindow(app: app)
+            }
+            return true
+        }
+        try? await Task.sleep(for: .milliseconds(500))
     }
-    return nil
+    if !settingsWasOpen { closeSettingsWindow(app: app) }
+    return false
 }
 
-private func findButtonByID(in root: AXUIElement, id: String) -> AXUIElement? {
-    var queue = [root]
+private func findFirstTileInLiveWallpaperSection(_ root: AXUIElement) -> AXUIElement? {
+    var queue = [(root, false)]
     while !queue.isEmpty {
-        let cur = queue.removeFirst()
-        var roleVal: CFTypeRef?
-        if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
-            if let role = roleVal as? String, role == (kAXButtonRole as String) {
-                var idVal: CFTypeRef?
-                if AXUIElementCopyAttributeValue(cur, kAXIdentifierAttribute as CFString, &idVal) == .success {
-                    if let bid = idVal as? String, bid.contains(id) { return cur }
+        let (cur, inLW) = queue.removeFirst()
+
+        if inLW {
+            // We're inside the LiveWallpaper section's tile grid — search for the first button
+            var roleVal: CFTypeRef?
+            AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal)
+            if (roleVal as? String) == (kAXButtonRole as String) { return cur }
+
+            // Breadth-first through children
+            var kidsVal: CFTypeRef?
+            if AXUIElementCopyAttributeValue(cur, kAXChildrenAttribute as CFString, &kidsVal) == .success {
+                if let kids = kidsVal as? [AXUIElement] {
+                    queue.append(contentsOf: kids.map { ($0, true) })
                 }
             }
+            continue
         }
+
+        // Search for AXStaticText with value='LiveWallpaper' → next sibling is the tile container
         var kidsVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXChildrenAttribute as CFString, &kidsVal) == .success {
             if let kids = kidsVal as? [AXUIElement] {
-                queue.append(contentsOf: kids)
+                for i in 0..<kids.count {
+                    var valueVal: CFTypeRef?, roleVal: CFTypeRef?
+                    AXUIElementCopyAttributeValue(kids[i], kAXValueAttribute as CFString, &valueVal)
+                    AXUIElementCopyAttributeValue(kids[i], kAXRoleAttribute as CFString, &roleVal)
+                    if let role = roleVal as? String, role == "AXStaticText",
+                       let value = valueVal as? String, value.localizedCaseInsensitiveContains("lifewallpaper") {
+                        // Next sibling after the label is the ScrollArea containing tiles
+                        if i + 1 < kids.count {
+                            queue.append((kids[i + 1], true))
+                        }
+                    }
+                }
+                queue.append(contentsOf: kids.map { ($0, false) })
             }
         }
     }
@@ -248,6 +261,13 @@ private func closeSettingsWindow(app: AXUIElement) {
             AXUIElementPerformAction(kid, kAXPressAction as CFString)
             return
         }
+    }
+}
+
+func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) -> Void) {
+    Task { @MainActor in
+        let ok = await selectFirstLiveWallpaperTile()
+        completion(ok)
     }
 }
 
