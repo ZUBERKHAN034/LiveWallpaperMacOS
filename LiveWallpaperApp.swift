@@ -172,56 +172,54 @@ func applyLockScreenAutomation(tileName: String, completion: @escaping (Bool) ->
     guard let u = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") else {
         completion(false); return
     }
+    let settingsWasOpen = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.systempreferences" }
     NSWorkspace.shared.open(u)
     let tn = tileName
     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
         var pid: pid_t = -1
-        for _ in 0..<20 {
+        for _ in 0..<40 {
             if let p = NSWorkspace.shared.runningApplications.first(where: {
                 $0.bundleIdentifier == "com.apple.systempreferences"
             })?.processIdentifier { pid = p; break }
-            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
+            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.25))
         }
         guard pid != -1 else { completion(false); return }
         let app = AXUIElementCreateApplication(pid)
-        guard let catBtn = lsaFindButton(app: app, desc: "LiveWallpaper", timeout: 8) else {
-            completion(false); return
-        }
-        AXUIElementPerformAction(catBtn, kAXPressAction as CFString)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            let app2 = AXUIElementCreateApplication(pid)
-            if let tileBtn = lsaFindButton(app: app2, desc: tn, timeout: 10) {
-                let ok = AXUIElementPerformAction(tileBtn, kAXPressAction as CFString) == .success
-                completion(ok)
-            } else {
-                completion(false)
+        let found = findTileButton(in: app, id: "\(tn);", timeout: 15)
+        if let tile = found {
+            let ok = AXUIElementPerformAction(tile, kAXPressAction as CFString) == .success
+            if ok && !settingsWasOpen {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    closeSettingsWindow(app: app)
+                }
             }
+            completion(ok)
+        } else {
+            if !settingsWasOpen { closeSettingsWindow(app: app) }
+            completion(false)
         }
     }
 }
 
-private func lsaFindButton(app: AXUIElement, desc: String, timeout: Double) -> AXUIElement? {
+private func findTileButton(in root: AXUIElement, id: String, timeout: TimeInterval) -> AXUIElement? {
     let deadline = Date().timeIntervalSince1970 + timeout
     while Date().timeIntervalSince1970 < deadline {
-        if let btn = findButton(in: app, desc: desc) { return btn }
+        if let btn = findButtonByID(in: root, id: id) { return btn }
         RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.5))
     }
     return nil
 }
 
-private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
+private func findButtonByID(in root: AXUIElement, id: String) -> AXUIElement? {
     var queue = [root]
     while !queue.isEmpty {
         let cur = queue.removeFirst()
         var roleVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal) == .success {
             if let role = roleVal as? String, role == (kAXButtonRole as String) {
-                var descVal: CFTypeRef?
-                if AXUIElementCopyAttributeValue(cur, kAXDescriptionAttribute as CFString, &descVal) == .success {
-                    let d = (descVal as? String) ?? ""
-                    if d.localizedCaseInsensitiveContains(desc) {
-                        return cur
-                    }
+                var idVal: CFTypeRef?
+                if AXUIElementCopyAttributeValue(cur, kAXIdentifierAttribute as CFString, &idVal) == .success {
+                    if let bid = idVal as? String, bid.contains(id) { return cur }
                 }
             }
         }
@@ -233,6 +231,24 @@ private func findButton(in root: AXUIElement, desc: String) -> AXUIElement? {
         }
     }
     return nil
+}
+
+private func closeSettingsWindow(app: AXUIElement) {
+    var windowsVal: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsVal) == .success,
+          let windows = windowsVal as? [AXUIElement],
+          let win = windows.first else { return }
+    var children: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(win, kAXChildrenAttribute as CFString, &children) == .success,
+          let kids = children as? [AXUIElement] else { return }
+    for kid in kids {
+        var srVal: CFTypeRef?
+        AXUIElementCopyAttributeValue(kid, kAXSubroleAttribute as CFString, &srVal)
+        if let sr = srVal as? String, sr == (kAXCloseButtonSubrole as String) {
+            AXUIElementPerformAction(kid, kAXPressAction as CFString)
+            return
+        }
+    }
 }
 
 
