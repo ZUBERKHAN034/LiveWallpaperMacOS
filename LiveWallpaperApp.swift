@@ -185,20 +185,31 @@ func selectFirstLiveWallpaperTile() async -> Bool {
     }
     guard let app = app else { return false }
 
-    // Poll for "LiveWallpaper" section header → tile
-    let deadline = Date().timeIntervalSince1970 + 15
-    while Date().timeIntervalSince1970 < deadline {
-        if let tile = findFirstTileInLiveWallpaperSection(app) {
-            guard AXUIElementPerformAction(tile, kAXPressAction as CFString) == .success else { return false }
-            if !settingsWasOpen {
-                try? await Task.sleep(for: .seconds(1))
-                closeSettingsWindow(app: app)
-            }
-            return true
-        }
-        try? await Task.sleep(for: .milliseconds(500))
+    let ok = await clickFirstTileWithRetry(app: app, maxRetries: 15, interval: 0.5)
+
+    if !settingsWasOpen {
+        try? await Task.sleep(for: .seconds(1))
+        closeSettingsWindow(app: app)
     }
-    if !settingsWasOpen { closeSettingsWindow(app: app) }
+    return ok
+}
+
+func clickFirstTileInOpenSettings() async -> Bool {
+    guard AXIsProcessTrusted() else { return false }
+    guard let sp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.systempreferences" }) else {
+        return false
+    }
+    let app = AXUIElementCreateApplication(sp.processIdentifier)
+    return await clickFirstTileWithRetry(app: app, maxRetries: 10, interval: 0.5)
+}
+
+private func clickFirstTileWithRetry(app: AXUIElement, maxRetries: Int, interval: TimeInterval) async -> Bool {
+    for _ in 0..<maxRetries {
+        if let tile = findFirstTileInLiveWallpaperSection(app) {
+            return AXUIElementPerformAction(tile, kAXPressAction as CFString) == .success
+        }
+        try? await Task.sleep(for: .milliseconds(UInt64(interval * 1000)))
+    }
     return false
 }
 
@@ -208,12 +219,9 @@ private func findFirstTileInLiveWallpaperSection(_ root: AXUIElement) -> AXUIEle
         let (cur, inLW) = queue.removeFirst()
 
         if inLW {
-            // We're inside the LiveWallpaper section's tile grid — search for the first button
             var roleVal: CFTypeRef?
             AXUIElementCopyAttributeValue(cur, kAXRoleAttribute as CFString, &roleVal)
             if (roleVal as? String) == (kAXButtonRole as String) { return cur }
-
-            // Breadth-first through children
             var kidsVal: CFTypeRef?
             if AXUIElementCopyAttributeValue(cur, kAXChildrenAttribute as CFString, &kidsVal) == .success {
                 if let kids = kidsVal as? [AXUIElement] {
@@ -223,7 +231,6 @@ private func findFirstTileInLiveWallpaperSection(_ root: AXUIElement) -> AXUIEle
             continue
         }
 
-        // Search for AXStaticText with value='LiveWallpaper' → next sibling is the tile container
         var kidsVal: CFTypeRef?
         if AXUIElementCopyAttributeValue(cur, kAXChildrenAttribute as CFString, &kidsVal) == .success {
             if let kids = kidsVal as? [AXUIElement] {
@@ -233,7 +240,6 @@ private func findFirstTileInLiveWallpaperSection(_ root: AXUIElement) -> AXUIEle
                     AXUIElementCopyAttributeValue(kids[i], kAXRoleAttribute as CFString, &roleVal)
                     if let role = roleVal as? String, role == "AXStaticText",
                        let value = valueVal as? String, value.localizedCaseInsensitiveContains("lifewallpaper") {
-                        // Next sibling after the label is the ScrollArea containing tiles
                         if i + 1 < kids.count {
                             queue.append((kids[i + 1], true))
                         }

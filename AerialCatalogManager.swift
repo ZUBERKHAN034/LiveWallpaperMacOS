@@ -220,11 +220,11 @@ final class AerialCatalogManager: NSObject, @unchecked Sendable {
         // ── Kick the wallpaper service ────────────────────────────────
         kickTahoe()
 
-        // Retry loop: wait for WallpaperAgent to reload entries.json
+        // Wait for WallpaperAgent to reload entries.json, then click first tile
         var attempts = 0
         while attempts < 10 {
             try? await Task.sleep(for: .seconds(2))
-            if await selectFirstLiveWallpaperTile() { break }
+            if await clickFirstTileInOpenSettings() { break }
             attempts += 1
         }
 
